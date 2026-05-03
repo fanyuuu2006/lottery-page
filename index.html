@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NTUST Board Game Club - 抽獎輪盤</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="logo-container">
+        <img
+          src="assets/images/logo.jpg"
+          alt="BGC Logo"
+          class="logo"
+          onerror="
+            this.src = '';
+            this.alt = 'BGC';
+            this.style.display = 'none';
+          "
+        />
+      </div>
+      <h1>桌遊社期末抽獎系統</h1>
+    </header>
+
+    <main class="container">
+      <!-- 左側：輸入區 -->
+      <section class="panel left-panel">
+        <h2>📝 姓名清單</h2>
+        <p class="hint">每行輸入一個名字，重複出現代表機率增加</p>
+        <textarea
+          id="nameInput"
+          placeholder="請輸入姓名，例如：&#10;楊苯胺&#10;陳好聞&#10;陳大班"
+        ></textarea>
+
+        <div class="stats">
+          <span>參與人數: <strong id="uniqueCount">0</strong></span>
+          <span>總籤數(權重): <strong id="totalWeight">0</strong></span>
+        </div>
+
+        <div class="controls">
+          <button id="updateBtn" class="btn btn-secondary">更新名單</button>
+          <button id="spinBtn" class="btn btn-primary" disabled>
+            🎲 開始抽獎
+          </button>
+          <button id="resetBtn" class="btn btn-danger">重置紀錄</button>
+        </div>
+      </section>
+
+      <!-- 中間：輪盤區 -->
+      <section class="panel center-panel">
+        <div class="wheel-container">
+          <canvas id="wheelCanvas" width="500" height="500"></canvas>
+          <div class="wheel-pointer"></div>
+          <div class="wheel-center">
+            <span id="centerText">BGC</span>
+          </div>
+        </div>
+        <div class="winner-display" id="winnerDisplay">
+          <div class="winner-text" id="winnerText">準備抽獎</div>
+        </div>
+      </section>
+
+      <!-- 右側：歷史紀錄 -->
+      <section class="panel right-panel">
+        <h2>🏆 中獎紀錄</h2>
+        <div class="history-list" id="historyList">
+          <div class="empty-state">尚未有中獎者產生</div>
+        </div>
+      </section>
+    </main>
+
+    <script src="js/script.js"></script>
+  </body>
+</html>
