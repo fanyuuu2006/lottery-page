@@ -21,7 +21,7 @@ body {
   background-color: #121212;
   background-image:
     linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.5)),
-    url("assets/images/151WtqzN__SeYXwQ4C-n6miBo1Vua5huk.jpg");
+    url("/assets/images/151WtqzN__SeYXwQ4C-n6miBo1Vua5huk.jpg");
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
