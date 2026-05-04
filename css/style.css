@@ -91,16 +91,9 @@ body {
   min-height: 0;
 }
 
-.left-panel {
-  grid-column: 1;
-}
 .center-panel {
-  grid-column: 2;
   align-items: center;
   justify-content: center;
-}
-.right-panel {
-  grid-column: 3;
 }
 
 h2 {
@@ -325,7 +318,6 @@ canvas {
   display: flex;
   align-items: center;
   border: 1px solid var(--glass-border);
-  margin-bottom: 0.8rem;
   border-left: 4px solid var(--c);
 }
 
@@ -355,17 +347,6 @@ canvas {
   text-align: center;
   margin-top: 2rem;
   font-style: italic;
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 /* Responsive */
