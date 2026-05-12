@@ -62,6 +62,7 @@ const appState = {
   currentRotation: 0,
   hoveredIndex: -1,
   tooltip: null,
+  pendingWinner: null, // 紀錄尚未從名單中剔除的中獎者
 };
 
 // ==========================================
@@ -203,16 +204,22 @@ function handleWheelHover(e) {
     currentAngle += sliceAngle;
   }
 
-  if (foundIndex !== -1 && foundIndex !== appState.hoveredIndex) {
+  const isIndexChanged = foundIndex !== appState.hoveredIndex;
+
+  if (isIndexChanged) {
     appState.hoveredIndex = foundIndex;
-    drawWheel(); // 觸發重繪以凸顯
+    drawWheel(); // 只在 hovered 切片更換時才觸發重繪
+    
+    // 如果碰到了某個區塊，且與上次不同，則更新內部 HTML（避免無謂的 DOM 重組與 Reflow）
+    if (foundIndex !== -1) {
+      const item = appState.participants[foundIndex];
+      const percentage = ((item.weight / appState.totalWeight) * 100).toFixed(1);
+      appState.tooltip.innerHTML = `<strong>${item.name}</strong><br/>權重: ${item.weight}<br/>機率: ${percentage}%`;
+    }
   }
 
-  // 顯示並移動 Tooltip
+  // 滑鼠移動時只單純負責偏移 tooltip 位置
   if (foundIndex !== -1) {
-    const item = appState.participants[foundIndex];
-    const percentage = ((item.weight / appState.totalWeight) * 100).toFixed(1);
-    appState.tooltip.innerHTML = `<strong>${item.name}</strong><br/>權重: ${item.weight}<br/>機率: ${percentage}%`;
     appState.tooltip.style.left = `${e.pageX + 15}px`;
     appState.tooltip.style.top = `${e.pageY + 15}px`;
     appState.tooltip.style.display = "block";
@@ -237,6 +244,9 @@ function handleWheelLeave() {
  */
 function handleUpdateList() {
   if (appState.isSpinning) return;
+
+  // 使用者手動更新名單，清除待移除的中獎者狀態
+  appState.pendingWinner = null;
 
   const rawText = DOM.nameInput.value;
   // 透過正規表達式過濾空格及換行，並移除空白字串（優化：改為以逗號及換行分割，容許姓名中帶空白如英文名）
@@ -277,7 +287,20 @@ function handleUpdateList() {
  * 處理開始旋轉邏輯
  */
 function handleStartSpin() {
-  if (appState.isSpinning || appState.participants.length === 0) return;
+  if (appState.isSpinning) return;
+
+  // 如果有上一局的中獎者尚未移除，在此時將其從名單中剔除
+  if (appState.pendingWinner) {
+    const winnerName = appState.pendingWinner.name;
+    const index = appState.participants.findIndex((p) => p.name === winnerName);
+    if (index !== -1) {
+      removeWinnerFromList(index, winnerName);
+    }
+    appState.pendingWinner = null;
+    updateUIManager();
+  }
+
+  if (appState.participants.length === 0) return;
 
   // 啟動音效環境防瀏覽器阻擋策略
   if (audioCtx.state === "suspended") audioCtx.resume();
@@ -307,6 +330,7 @@ function handleReset() {
   appState.totalWeight = 0;
   appState.history = [];
   appState.currentRotation = 0;
+  appState.pendingWinner = null;
 
   DOM.nameInput.value = "";
   DOM.historyList.innerHTML = '<div class="empty-state">尚未有中獎者產生</div>';
@@ -355,12 +379,15 @@ function calculateTargetRotation(winnerIndex, winner) {
   // 加上隨機的整體圈數 (讓輪盤每次都多轉 8~11 圈，避免短程停止)
   const baseSpins = 8 + Math.floor(Math.random() * 4);
   const extraSpins = TWO_PI * baseSpins;
+  
+  // 優化數學運算：取當前的總基礎圈數，疊加新目標即可，不使用迴圈反覆加 TWO_PI
+  const currentBaseRotation = appState.currentRotation - (appState.currentRotation % TWO_PI);
 
-  // 目標角度 = 額外轉數 + (指針目標角度 - 該切片偏離 0 度的角度)
-  let targetRotation = extraSpins + (targetPointerAngle - sliceCenterAngle);
+  // 目標角度 = 當前基礎圈數 + 額外轉數 + (指針目標角度 - 該切片偏離 0 度的角度)
+  let targetRotation = currentBaseRotation + extraSpins + (targetPointerAngle - sliceCenterAngle);
 
   // 防衛：維持角度的連續疊加以便於動畫不發生反轉
-  while (targetRotation < appState.currentRotation) {
+  if (targetRotation < appState.currentRotation) {
     targetRotation += TWO_PI;
   }
 
@@ -426,15 +453,15 @@ function finishSpin(winnerIndex) {
   appState.history.push(winner);
   addHistoryItemToDOM(winner, appState.history.length);
 
-  // 2. 將贏家從畫布及輸入框剔除
-  removeWinnerFromList(winnerIndex, winner.name);
-
-  // 3. UI 得獎版面顯示
+  // 2. UI 得獎版面顯示
   DOM.winnerText.innerHTML = `恭喜 <strong style="color: ${winner.color};">${winner.name}</strong> 抽中！`;
   DOM.winnerDisplay.classList.add("highlight");
 
+  // 3. 紀錄本次中獎者，但不立即剔除，保留畫面
+  appState.pendingWinner = winner;
+
+  // 恢復可點擊狀態，但不重置輪盤角度與名單
   setSpinningState(false);
-  updateUIManager();
 }
 
 /**
@@ -443,19 +470,26 @@ function finishSpin(winnerIndex) {
  * @param {string} winnerName
  */
 function removeWinnerFromList(winnerIndex, winnerName) {
-  // 從記憶體陣列移除
-  appState.participants.splice(winnerIndex, 1);
-  appState.totalWeight = appState.participants.reduce(
-    (sum, p) => sum + p.weight,
-    0,
-  );
+  // 從記憶體陣列移除單一權重 (若只中獎一次則扣除權重 1，扣光才移除該項)
+  const p = appState.participants[winnerIndex];
+  if (p.weight > 1) {
+    p.weight -= 1;
+  } else {
+    appState.participants.splice(winnerIndex, 1);
+  }
+  appState.totalWeight -= 1;
 
-  // 從輸入文字框移除：改用陣列過濾避免了以 RegExp Replace 多行匹配可能帶來的異常空行漏洞
+  // 從輸入文字框移除單筆：避免把同名多次輸入的人一次刪光
   const currentLines = DOM.nameInput.value
     .split(/[\r\n,]+/)
-    .map((s) => s.trim());
-  const nextLines = currentLines.filter((name) => name && name !== winnerName);
-  DOM.nameInput.value = nextLines.join("\n");
+    .map((s) => s.trim())
+    .filter(Boolean);
+    
+  const targetIdx = currentLines.indexOf(winnerName);
+  if (targetIdx !== -1) {
+    currentLines.splice(targetIdx, 1);
+  }
+  DOM.nameInput.value = currentLines.join("\n");
 }
 
 // ==========================================
@@ -480,7 +514,7 @@ function updateUIManager() {
     DOM.winnerDisplay.classList.remove("show", "highlight");
   }
 
-  appState.currentRotation = 0; // 重置輪盤以回到原始 0 度
+  // 移除了 currentRotation = 0 的硬設定，讓盤面旋轉狀態可以順暢保留
   drawWheel();
 }
 
@@ -655,14 +689,11 @@ function playBeep(frequency, type = "sine", duration = 0.1) {
   oscillator.start();
   oscillator.stop(audioCtx.currentTime + duration);
 
-  // 優化效能：播放完畢後進行分離以確保資源迅速獲得解脫
-  setTimeout(
-    () => {
-      oscillator.disconnect();
-      gainNode.disconnect();
-    },
-    duration * 1000 + 50,
-  );
+  // 優化效能：依賴 onended 而非 setTimeout，可避免因瀏覽器主執行緒阻塞或背景降頻而被延誤釋放
+  oscillator.onended = () => {
+    oscillator.disconnect();
+    gainNode.disconnect();
+  };
 }
 
 // 執行應用初始化
